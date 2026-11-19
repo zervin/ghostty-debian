@@ -1,0 +1,80 @@
+name: Manual Debian package
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: manual-debian-release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.metadata.outputs.version }}
+      tag: ${{ steps.metadata.outputs.tag }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Static checks
+        run: bash tests/static.sh
+      - name: Trusted release identifiers
+        id: metadata
+        run: python3 scripts/release-metadata.py
+      - name: Build, lint, and fresh-container smoke test
+        run: bash scripts/build.sh
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ghostty-debian
+          path: artifacts/*
+          if-no-files-found: error
+          retention-days: 30
+
+  publish:
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      # Clean runner: no checkout, no build scripts, and never execute downloaded files.
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ghostty-debian
+          path: ${{ runner.temp }}/release
+      - name: Create draft for this exact workflow commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TARGET_SHA: ${{ github.sha }}
+          PACKAGE_VERSION: ${{ needs.build.outputs.version }}
+          RELEASE_TAG: ${{ needs.build.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ $TARGET_SHA =~ ^[0-9a-f]{40}$ ]]
+          [[ $PACKAGE_VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+-[0-9]+personal[0-9]+~deb13u[0-9]+$ ]]
+          [[ $RELEASE_TAG == "ghostty-${PACKAGE_VERSION/\~/-}" ]]
+          [[ -f "$RUNNER_TEMP/release/ghostty_${PACKAGE_VERSION}_amd64.deb" ]]
+          [[ -f "$RUNNER_TEMP/release/SHA256SUMS" ]]
+          # Refuse unexpected paths. Data files are uploaded, never sourced or executed.
+          for file in "$RUNNER_TEMP/release/"*; do
+            [[ -f $file && ! -L $file ]]
+            name=${file##*/}
+            [[ $name =~ ^[a-zA-Z0-9._+~=-]+$ ]]
+          done
+          # Refuse an existing tag rather than attaching a release to an older commit.
+          existing=$(gh api "repos/$GH_REPO/git/matching-refs/tags/$RELEASE_TAG" --jq '.[].ref')
+          if [[ -n $existing ]]; then
+            echo 'Release tag already exists; review and increment packaging version' >&2
+            exit 1
+          fi
+          gh release create "$RELEASE_TAG" "$RUNNER_TEMP/release/"* \
+            --repo "$GH_REPO" --target "$TARGET_SHA" --draft \
+            --title "Ghostty $PACKAGE_VERSION — Debian 13 amd64" \
+            --notes 'Independent personal build. Review SHA256SUMS, input signatures, build records, and lintian warnings before publishing. Headless smoke only; interactive Wayland/X11 testing pending. See README and SECURITY.md at the target commit.'

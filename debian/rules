@@ -1,0 +1,32 @@
+#!/usr/bin/make -f
+
+# dpkg's flags apply to debhelper tools, not automatically to Zig's C/Zig code.
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+export LC_ALL = C.UTF-8
+export TZ = UTC
+
+%:
+	dh $@
+
+override_dh_auto_configure:
+
+target_flags = -Doptimize=ReleaseSafe -Dcpu=baseline -Dpie=true -Dsentry=false -fno-sys=gtk4-layer-shell -Demit-docs -Dversion-string=1.4.0
+
+override_dh_auto_build:
+	DESTDIR=$(CURDIR)/debian/tmp zig build $(target_flags) --prefix /usr --prefix-lib-dir lib
+
+override_dh_auto_test:
+	# Runtime smoke tests run after installing the package in a fresh container.
+
+override_dh_auto_install:
+	python3 debian/collect-licenses.py
+
+override_dh_strip:
+	dh_strip --no-automatic-dbgsym
+
+override_dh_auto_clean:
+	rm -rf .zig-cache zig-out debian/bundled-licenses
+
+override_dh_installdocs:
+	dh_installdocs LICENSE debian/packaging-LICENSE build.zig.zon build.zig.zon.txt
+	cp -a debian/bundled-licenses debian/ghostty/usr/share/doc/ghostty/

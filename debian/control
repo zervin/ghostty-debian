@@ -1,0 +1,20 @@
+Source: ghostty
+Section: x11
+Priority: optional
+Maintainer: zervin <zervin@users.noreply.github.com>
+Build-Depends: debhelper-compat (= 13), build-essential, pandoc, gettext,
+ libadwaita-1-dev, libgtk-4-dev, libxml2-utils, pkgconf, libbz2-dev,
+ libonig-dev, ncurses-bin, python3
+Standards-Version: 4.7.2
+Homepage: https://ghostty.org/
+Rules-Requires-Root: no
+Vcs-Git: https://github.com/zervin/ghostty-debian.git
+Vcs-Browser: https://github.com/zervin/ghostty-debian
+
+Package: ghostty
+Architecture: amd64
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: GPU-accelerated terminal emulator (personal build)
+ Ghostty is a terminal emulator with a native GTK user interface.
+ This independent personal package targets Debian 13 (trixie) amd64.
+ It is not an official Ghostty or Debian package.

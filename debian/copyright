@@ -1,0 +1,18 @@
+Ghostty: https://github.com/ghostty-org/ghostty
+Source: https://release.files.ghostty.org/1.4.0/ghostty-1.4.0.tar.gz
+
+Ghostty's original code is Copyright (c) 2024 Mitchell Hashimoto, Ghostty contributors,
+licensed under the MIT license. The full upstream LICENSE is installed
+as /usr/share/doc/ghostty/LICENSE (possibly compressed).
+
+Bundled dependencies, fonts, and themes have their own copyright holders
+and license terms, not uniformly MIT. License/notice files discovered in
+the signed source and fetched dependency cache are preserved under
+/usr/share/doc/ghostty/bundled-licenses/ with their relative paths.
+The upstream build.zig.zon and build.zig.zon.txt record dependency sources.
+This collection is an aid to review, not a claim of a completed license audit.
+Review the source and transitive dependencies before redistributing.
+
+Original Debian packaging and build scripts:
+Copyright (c) 2026 zervin
+License: MIT; see /usr/share/doc/ghostty/packaging-LICENSE (possibly compressed).
