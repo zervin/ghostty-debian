@@ -11,7 +11,7 @@ export TZ = UTC
 override_dh_auto_configure:
 
 upstream_version = $(firstword $(subst -, ,$(shell dpkg-parsechangelog -S Version)))
-target_flags = -Doptimize=ReleaseSafe -Dcpu=baseline -Dpie=true -Dsentry=false -fno-sys=gtk4-layer-shell -Demit-docs -Dversion-string=$(upstream_version)
+target_flags = -Doptimize=ReleaseFast -Dcpu=baseline -Dpie=true -Dsentry=false -fno-sys=gtk4-layer-shell -Demit-docs -Dversion-string=$(upstream_version)
 
 override_dh_auto_build:
 	# Zig builds and stages in auto_install, after dh_prep clears debian/tmp.

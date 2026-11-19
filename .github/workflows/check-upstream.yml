@@ -3,6 +3,11 @@ on:
   schedule:
     - cron: '23 8 * * *'
   workflow_dispatch:
+    inputs:
+      reviewer_self_test:
+        description: Test the real bot-dispatched reviewer without creating or merging PRs
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -13,7 +18,7 @@ concurrency:
 
 jobs:
   check:
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && inputs.reviewer_self_test != true
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -50,6 +55,7 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+      actions: write
     steps:
       # This is the trusted workflow commit, never the proposed branch or PR contents.
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -68,7 +74,13 @@ jobs:
           existing=$(gh api "repos/$GH_REPO/git/matching-refs/heads/$BRANCH" --jq '.[].ref')
           if [[ -n $existing ]]; then
             echo "Branch $BRANCH already exists; leaving its changes and PR untouched."
-            gh pr list --repo "$GH_REPO" --head "$BRANCH" --base main
+            pr=$(gh pr list --repo "$GH_REPO" --head "$BRANCH" --base main --state open --json number,headRefOid --jq 'if length == 1 then .[0] else empty end')
+            if [[ -n $pr ]]; then
+              number=$(jq -r .number <<< "$pr")
+              head=$(jq -r .headRefOid <<< "$pr")
+              [[ $number =~ ^[1-9][0-9]*$ && $head =~ ^[0-9a-f]{40}$ ]]
+              gh workflow run gated-update.yml --repo "$GH_REPO" --ref main -f pr_number="$number" -f expected_head_sha="$head"
+            fi
             exit 0
           fi
           python3 scripts/check-upstream.py --update --expected-version "$VERSION"
@@ -82,4 +94,22 @@ jobs:
           git push origin "HEAD:refs/heads/$BRANCH"
           gh pr create --repo "$GH_REPO" --base main --head "$BRANCH" \
             --title "Review Ghostty $VERSION stable release" \
-            --body 'Review the verified upstream tag, pinned commit, source URL, Debian revision and changelog. The pinned Zig compiler is unchanged and satisfies the upstream minimum; an actual build still validates compatibility. Merge manually to trigger the Debian build and draft release. GITHUB_TOKEN-created PRs do not trigger other workflows. No automatic merge or publication.'
+            --body 'Verified stable upstream release proposal. The pinned compiler and infrastructure are unchanged. Automatic merging requires strict metadata validation, premerge package tests and an explicit complete Claude approval for this exact head. Significant findings, missing/failed reviews, stale heads and incomplete evidence block merging. Successful gated merges explicitly dispatch the release workflow.'
+          number=$(gh pr view "$BRANCH" --repo "$GH_REPO" --json number --jq .number)
+          head=$(git rev-parse HEAD)
+          [[ $number =~ ^[1-9][0-9]*$ && $head =~ ^[0-9a-f]{40}$ ]]
+          gh workflow run gated-update.yml --repo "$GH_REPO" --ref main -f pr_number="$number" -f expected_head_sha="$head"
+
+  reviewer-self-test:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.reviewer_self_test == true
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Exercise the same bot identity used for automated update reviews
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh workflow run gated-update.yml --repo "$GH_REPO" --ref main -f mode=self-test

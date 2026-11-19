@@ -19,6 +19,8 @@ mkdir /work/source /work/zig
 tar --extract --gzip --file ghostty.tar.gz --directory /work/source --strip-components=1 --no-same-owner
 tar --extract --xz --file zig.tar.xz --directory /work/zig --strip-components=1 --no-same-owner
 [[ $(zig version) == "$ZIG_VERSION" ]]
+# A valid signature alone must not permit replaying a different signed release.
+[[ $(< /work/source/VERSION) == "$GHOSTTY_VERSION" ]]
 # Fetch through the signed manifests into default zig-pkg local storage. Bare
 # fetch produces unusable recompressed archives with Zig 0.17.1; never reuse them.
 [[ ! -e /work/source/zig-pkg ]]

@@ -11,6 +11,8 @@ version=$(dpkg-deb -f "${packages[0]}" Version)
 ghostty +version | tee /tmp/ghostty-version.txt
 upstream=${version%%-*}
 grep -Fq "Ghostty $upstream" /tmp/ghostty-version.txt
+# A performance release must never silently fall back to Debug/ReleaseSafe.
+grep -Eq 'build mode[[:space:]]*:[[:space:]]*\.fast$' /tmp/ghostty-version.txt
 # Test CLI as a non-root user with a new home and no display server.
 useradd --create-home smoke
 printf 'font-size = 12\n' > /tmp/valid.ghostty

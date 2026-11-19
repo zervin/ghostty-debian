@@ -29,7 +29,7 @@ dpkg-query -W -f='${binary:Package}\t${Version}\t${Architecture}\n' > /out/build
     printf 'ghostty_version=%s\nupstream_tag_commit=%s\nzig_version=%s\ndebian_version=%s\nbase_image=%s\n' \
         "$GHOSTTY_VERSION" "$GHOSTTY_COMMIT" "$ZIG_VERSION" "$DEBIAN_VERSION" "$DEBIAN_IMAGE"
     printf 'source_date_epoch=%s\nnetwork_during_compile=none\nuid=%s\n' "$SOURCE_DATE_EPOCH" "$(id -u)"
-    printf 'build_options=ReleaseSafe,cpu=baseline,pie=true,sentry=false,bundled-gtk4-layer-shell,emit-docs\n'
+    printf 'build_options=ReleaseFast,cpu=baseline,pie=true,sentry=false,bundled-gtk4-layer-shell,emit-docs\n'
     printf 'dependency_mode=normal-zig-pkg-prefetched-with-fetch-all\n'
     zig version
     dpkg-buildpackage --version

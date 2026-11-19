@@ -97,7 +97,7 @@ class SecurityInvariantsTests(unittest.TestCase):
         rules = (ROOT / "debian/rules").read_text()
         self.assertNotIn("--system", rules)
         self.assertNotIn("--pkg-dir", rules)
-        for option in ["-Doptimize=ReleaseSafe", "-Dcpu=baseline", "-Dpie=true", "-Dsentry=false", "-fno-sys=gtk4-layer-shell", "-Demit-docs", "-Dversion-string=$(upstream_version)"]:
+        for option in ["-Doptimize=ReleaseFast", "-Dcpu=baseline", "-Dpie=true", "-Dsentry=false", "-fno-sys=gtk4-layer-shell", "-Demit-docs", "-Dversion-string=$(upstream_version)"]:
             self.assertIn(option, rules)
 
     def test_prefetch_uses_normal_build_fetch_all_and_preserves_local_packages(self):

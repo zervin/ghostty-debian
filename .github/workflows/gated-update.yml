@@ -1,0 +1,233 @@
+name: Claude-gated upstream update
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Review an update or test the reviewer without merging
+        type: choice
+        options: [review-update, self-test]
+        default: review-update
+      pr_number:
+        description: Automation PR number (review-update only)
+        type: string
+        default: ''
+      expected_head_sha:
+        description: Expected immutable PR head (review-update only)
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gated-upstream-update
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      head_sha: ${{ steps.candidate.outputs.head_sha }}
+      base_sha: ${{ steps.candidate.outputs.base_sha }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Static policy checks
+        run: bash tests/static.sh
+      - name: Validate exact bot PR and verified upstream inputs
+        id: candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MODE: ${{ inputs.mode }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          EXPECTED_HEAD: ${{ inputs.expected_head_sha }}
+          WORKFLOW_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [[ $MODE == self-test ]]; then
+            printf 'head_sha=%s\nbase_sha=%s\n' "$WORKFLOW_SHA" "$WORKFLOW_SHA" >> "$GITHUB_OUTPUT"
+          else
+            [[ $MODE == review-update && $PR_NUMBER =~ ^[1-9][0-9]*$ && $EXPECTED_HEAD =~ ^[0-9a-f]{40}$ ]]
+            python3 scripts/update-gate.py validate --pr "$PR_NUMBER" --output-dir "$RUNNER_TEMP/evidence" --github-output "$RUNNER_TEMP/validated"
+            grep -Fx "head_sha=$EXPECTED_HEAD" "$RUNNER_TEMP/validated"
+            grep -Fx "base_sha=$WORKFLOW_SHA" "$RUNNER_TEMP/validated"
+            # Only the trusted validator emits these fixed, validated identifiers.
+            while IFS= read -r line; do printf '%s\n' "$line" >> "$GITHUB_OUTPUT"; done < "$RUNNER_TEMP/validated"
+          fi
+
+  package:
+    needs: validate
+    if: inputs.mode == 'review-update'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    steps:
+      # No Anthropic credentials or write token. This head was proven to change
+      # ONLY release.conf and changelog; no untrusted workflow/scripts are run.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.validate.outputs.head_sha }}
+          persist-credentials: false
+      - run: bash tests/static.sh
+      - name: Verified-source offline build and fresh installation tests
+        run: bash scripts/build.sh
+
+  review:
+    needs: [validate, package]
+    if: >-
+      always() && needs.validate.result == 'success' &&
+      (needs.package.result == 'success' || inputs.mode == 'self-test')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      approved: ${{ steps.verdict.outputs.approved }}
+      head_sha: ${{ needs.validate.outputs.head_sha }}
+    steps:
+      # Trusted workflow commit only; NEVER the PR head in this secrets job.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Require a configured reviewer credential
+        env:
+          HAS_API_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+          HAS_OAUTH: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
+        run: |
+          [[ $HAS_API_KEY == true || $HAS_OAUTH == true ]] || {
+            echo 'Claude credential missing: automatic updates remain blocked.' >&2; exit 1;
+          }
+      - name: Revalidate and prepare bounded data-only prompt
+        id: evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MODE: ${{ inputs.mode }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          EXPECTED_HEAD: ${{ needs.validate.outputs.head_sha }}
+          EXPECTED_BASE: ${{ needs.validate.outputs.base_sha }}
+        run: |
+          set -euo pipefail
+          if [[ $MODE == self-test ]]; then
+            python3 scripts/review-prompt.py --head-sha "$EXPECTED_HEAD" --self-test clean
+          else
+            python3 scripts/update-gate.py validate --pr "$PR_NUMBER" --output-dir "$RUNNER_TEMP/evidence" --github-output "$RUNNER_TEMP/revalidated"
+            grep -Fx "head_sha=$EXPECTED_HEAD" "$RUNNER_TEMP/revalidated"
+            grep -Fx "base_sha=$EXPECTED_BASE" "$RUNNER_TEMP/revalidated"
+            python3 scripts/review-prompt.py --head-sha "$EXPECTED_HEAD" --context-file "$RUNNER_TEMP/evidence/review-context.json"
+          fi
+      - name: Claude review (data only, no execution or write authority)
+        id: claude
+        uses: anthropics/claude-code-action@f431adaf77e0fecf918431e75a2b5b45b85af002 # v1
+        with:
+          github_token: ${{ github.token }}
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_code_oauth_token: ${{ secrets.ANTHROPIC_API_KEY == '' && secrets.CLAUDE_CODE_OAUTH_TOKEN || '' }}
+          allow_fork_prs: 'false'
+          classify_inline_comments: 'false'
+          show_full_output: 'false'
+          display_report: 'false'
+          allowed_bots: 'github-actions[bot]'
+          prompt: ${{ steps.evidence.outputs.prompt }}
+          claude_args: ${{ steps.evidence.outputs.claude_args }}
+      - name: Require explicit complete approval for the exact tested head
+        id: verdict
+        env:
+          CLAUDE_CONCLUSION: ${{ steps.claude.outputs.conclusion }}
+          REVIEW_JSON: ${{ steps.claude.outputs.structured_output }}
+          EXPECTED_HEAD: ${{ needs.validate.outputs.head_sha }}
+        run: |
+          set -euo pipefail
+          [[ $CLAUDE_CONCLUSION == success && -n $REVIEW_JSON ]]
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          Path(os.environ['RUNNER_TEMP'], 'verdict.json').write_text(os.environ['REVIEW_JSON'])
+          PY
+          python3 scripts/update-gate.py review --head-sha "$EXPECTED_HEAD" --json-file "$RUNNER_TEMP/verdict.json"
+      - name: Prepare deliberately unsafe reviewer self-test
+        if: inputs.mode == 'self-test'
+        id: unsafe
+        env:
+          EXPECTED_HEAD: ${{ needs.validate.outputs.head_sha }}
+        run: python3 scripts/review-prompt.py --head-sha "$EXPECTED_HEAD" --self-test unsafe
+      - name: Verify Claude also rejects dangerous changes
+        if: inputs.mode == 'self-test'
+        id: unsafe_claude
+        uses: anthropics/claude-code-action@f431adaf77e0fecf918431e75a2b5b45b85af002 # v1
+        with:
+          github_token: ${{ github.token }}
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_code_oauth_token: ${{ secrets.ANTHROPIC_API_KEY == '' && secrets.CLAUDE_CODE_OAUTH_TOKEN || '' }}
+          allow_fork_prs: 'false'
+          classify_inline_comments: 'false'
+          show_full_output: 'false'
+          display_report: 'false'
+          allowed_bots: 'github-actions[bot]'
+          prompt: ${{ steps.unsafe.outputs.prompt }}
+          claude_args: ${{ steps.unsafe.outputs.claude_args }}
+      - name: Require a valid blocked verdict for unsafe self-test
+        if: inputs.mode == 'self-test'
+        env:
+          CLAUDE_CONCLUSION: ${{ steps.unsafe_claude.outputs.conclusion }}
+          REVIEW_JSON: ${{ steps.unsafe_claude.outputs.structured_output }}
+          EXPECTED_HEAD: ${{ needs.validate.outputs.head_sha }}
+        run: |
+          set -euo pipefail
+          [[ $CLAUDE_CONCLUSION == success ]]
+          python3 - <<'PY'
+          import json, os
+          verdict = json.loads(os.environ['REVIEW_JSON'])
+          assert verdict['head_sha'] == os.environ['EXPECTED_HEAD']
+          assert verdict['decision'] == 'block'
+          assert verdict['high_critical_findings'] or verdict['blocking_findings']
+          print('PASS: real Claude returned a blocking verdict for unsafe fixture')
+          PY
+
+  merge:
+    needs: [validate, package, review]
+    if: >-
+      inputs.mode == 'review-update' && needs.package.result == 'success' &&
+      needs.review.result == 'success' && needs.review.outputs.approved == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Revalidate and fast-forward only the exact tested bot commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          EXPECTED_HEAD: ${{ needs.validate.outputs.head_sha }}
+          REVIEWED_HEAD: ${{ needs.review.outputs.head_sha }}
+          EXPECTED_BASE: ${{ needs.validate.outputs.base_sha }}
+        run: |
+          set -euo pipefail
+          [[ $EXPECTED_HEAD == "$REVIEWED_HEAD" ]]
+          python3 scripts/update-gate.py validate --pr "$PR_NUMBER" --output-dir "$RUNNER_TEMP/final-evidence" --github-output "$RUNNER_TEMP/final-validation"
+          grep -Fx "head_sha=$EXPECTED_HEAD" "$RUNNER_TEMP/final-validation"
+          grep -Fx "base_sha=$EXPECTED_BASE" "$RUNNER_TEMP/final-validation"
+          gh api --method POST "repos/$GH_REPO/issues/$PR_NUMBER/comments" \
+            -f body="Automated gate approved head $EXPECTED_HEAD: deterministic metadata/source checks, premerge package tests and explicit Claude review passed. This is not a security audit."
+          # The validated head's SOLE parent is EXPECTED_BASE. A non-forcing
+          # fast-forward cannot integrate onto an advanced, untested main, unlike
+          # the PR merge API whose SHA precondition only constrains the PR head.
+          merged=$(gh api --method PATCH "repos/$GH_REPO/git/refs/heads/main" -f sha="$EXPECTED_HEAD" -F force=false --jq .object.sha)
+          [[ $merged == "$EXPECTED_HEAD" ]]
+          gh api "repos/$GH_REPO/pulls/$PR_NUMBER" --jq 'if .merged then true else error("PR integration not confirmed; publication blocked") end'
+          # GITHUB_TOKEN merges suppress push workflows: explicitly dispatch the
+          # trusted release workflow, bound to the exact merged main commit.
+          gh workflow run release.yml --repo "$GH_REPO" --ref main -f expected_sha="$merged"

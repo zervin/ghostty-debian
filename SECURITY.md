@@ -31,7 +31,7 @@ inferred solely from this repository's supplied configuration:
   [Config.zig](https://github.com/ghostty-org/ghostty/blob/83fb95624b0439ee660c2679b43b38c8b63769cd/src/build/Config.zig)
   and Zig's standard target/optimization options. Zig 0.17.1's
   [Optimize.fromString](https://codeberg.org/ziglang/zig/src/tag/0.17.1/lib/std/lang.zig)
-  still accepts `ReleaseSafe` as a deprecated alias for `safe`; its
+  accepts the `ReleaseFast` optimization alias (the initial build used `ReleaseSafe`); its
   [Maker](https://codeberg.org/ziglang/zig/src/tag/0.17.1/lib/compiler/Maker.zig)
   supports `DESTDIR` for Debian staging. The bundled layer-shell
   dynamic library installation is visible in
@@ -53,6 +53,9 @@ minisign first, then records the observed hashes and signature records. These
 hashes can be reviewed and pinned in a later deliberate update.
 
 ## Remaining trust and isolation
+
+The additional model/action/prompt-injection and billing boundaries are documented
+in [AI-REVIEW.md](AI-REVIEW.md). AI approval is not a security audit.
 
 * Signatures authenticate holders of the configured signing keys, not code
   correctness or freedom from vulnerabilities. GitHub/TLS/account compromises,
@@ -101,24 +104,35 @@ hashes can be reviewed and pinned in a later deliberate update.
   updates. The maintainer must monitor upstream and rebuild; this is a personal
   tolerance decision, not Debian-policy-complete packaging. Other lintian errors
   remain fatal. Current warnings concern line adjustment in generated manuals.
-* Workflow actions are full-SHA pinned, checkout credentials are not persisted,
-  the build job is read-only, and a separate clean publish runner alone receives
-  release-write permission. Downloaded artifacts are uploaded as data, not
-  executed. Builds accept manual dispatch and reviewed packaging pushes to
-  `main`, never untrusted PR code. A separate daily/manual checker proposes new
-  stable versions in PRs; it requires a verified annotated tag, pins the commit,
-  and never upgrades Zig automatically. Its proposing job has contents/PR write
-  permission but never executes the proposed branch. A human merge is required
-  before building; no automatic merge or public release exists. GitHub Actions
-  PR creation must be enabled. If compiler compatibility changes or signatures
-  fail, maintenance is required rather than silently relaxing verification.
-  Maintainers with write access can still
-  alter this policy and GitHub controls the runners/token service.
+* Workflow actions are full-SHA pinned and checkout credentials are not persisted.
+  Daily/manual checks propose verified stable-source metadata PRs without changing
+  the compiler, keys, workflows or packaging policy. Explicit workflow dispatch
+  starts the gate for token-created PRs. A strict trusted-main validator checks
+  Git trees/blobs, bot identity, single-parent head, current base, exact two-file
+  update shape, signed tag metadata and bounded complete upstream comparisons.
+  Premerge builds run the validated head on a separate credential-free, read-only
+  runner; no arbitrary PR code is checked out in a secrets/write job.
+* Claude receives bounded inline evidence as untrusted data and a read-only GitHub
+  token. Its tool set is empty and execution/read/write/MCP tools are additionally
+  denied. It has no merge authority. Missing credentials, failed calls, incomplete
+  evidence, high/critical findings, blocking correctness/licensing issues or a
+  stale/malformed verdict block merging. A separate trusted merge job requires
+  passing package tests and an explicit complete approval, revalidates base/head,
+  uses a non-forcing fast-forward of the exact tested single-parent commit,
+  confirms the PR is merged and explicitly dispatches release CI. Normal base
+  advancement makes that update fail rather than merging onto an untested base.
+  This gate does not depend on an absent bot comment being treated as approval.
+* Successful trusted-main builds upload to a draft first, then publish only after
+  every asset upload succeeds. The separate publish runner does not checkout or
+  execute downloaded artifacts. Human changes on trusted main can also publish;
+  the bot-only gate is not a substitute for controlling repository write access.
+  Infra/compiler/key changes still require a maintainer. GitHub controls its
+  runners/token service; repository administrators can change the entire policy.
 * `SHA256SUMS` detects differing files relative to the downloaded checksum list;
   it does not independently authenticate an uploader when both are compromised.
   No signed `.deb`, signed `.changes`, SLSA attestation, or security guarantee is
-  claimed. Review draft release notes and exact target commit before publication.
+  claimed. Inspect release records and exact target commit before installation.
 * Headless tests do not prove interactive GUI/Wayland/X11/GPU operation.
-  Lintian warnings require manual review, and PIE/ReleaseSafe do not establish
+  Lintian warnings remain visible for review, and PIE/ReleaseFast do not establish
   complete hardening. Timely updates and uninterrupted availability are not
   guaranteed; decide for yourself whether these tradeoffs are acceptable.

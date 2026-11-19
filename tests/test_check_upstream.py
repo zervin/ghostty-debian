@@ -246,7 +246,7 @@ class CheckUpstreamWorkflowTests(unittest.TestCase):
         self.assertIn("pull-requests: write", propose)
         self.assertEqual(text.count("persist-credentials: false"), 2)
         self.assertEqual(text.count("uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262"), 2)
-        self.assertEqual(text.count("github.ref == 'refs/heads/main'"), 2)
+        self.assertEqual(text.count("github.ref == 'refs/heads/main'"), 3)
         self.assertIn('BRANCH="automation/ghostty-$VERSION"', propose)
         self.assertIn('if [[ -n $existing ]]; then', propose)
         self.assertNotIn("--force", text)

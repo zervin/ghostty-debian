@@ -1,6 +1,11 @@
 name: Reviewed Debian package
 on:
   workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Exact main commit required by automated merge dispatch
+        type: string
+        default: ''
   push:
     branches: [main]
     paths:
@@ -32,6 +37,12 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
+      - name: Require the dispatched immutable main commit
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          ACTUAL_SHA: ${{ github.sha }}
+        run: |
+          [[ -z $EXPECTED_SHA || ( $EXPECTED_SHA =~ ^[0-9a-f]{40}$ && $EXPECTED_SHA == "$ACTUAL_SHA" ) ]]
       - name: Static checks
         run: bash tests/static.sh
       - name: Trusted release identifiers
@@ -58,7 +69,7 @@ jobs:
         with:
           name: ghostty-debian
           path: ${{ runner.temp }}/release
-      - name: Create draft for this exact workflow commit
+      - name: Upload completely, then publish this verified release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -79,6 +90,7 @@ jobs:
             name=${file##*/}
             [[ $name =~ ^[a-zA-Z0-9._-]+$ ]]
           done
+          (cd "$RUNNER_TEMP/release" && sha256sum --check --strict SHA256SUMS)
           # Refuse an existing tag rather than attaching a release to an older commit.
           existing=$(gh api "repos/$GH_REPO/git/matching-refs/tags/$RELEASE_TAG" --jq '.[].ref')
           if [[ -n $existing ]]; then
@@ -88,4 +100,6 @@ jobs:
           gh release create "$RELEASE_TAG" "$RUNNER_TEMP/release/"* \
             --repo "$GH_REPO" --target "$TARGET_SHA" --draft \
             --title "Ghostty $PACKAGE_VERSION — Debian 13 amd64" \
-            --notes 'Independent personal build. Review SHA256SUMS, input signatures, build records, and lintian warnings before publishing. Headless smoke only; interactive Wayland/X11 testing pending. See README and SECURITY.md at the target commit.'
+            --notes 'Independent personal ReleaseFast build for my own risk tolerances, not an official Ghostty or Debian package or a security audit. Verified signed upstream source and compiler, offline compilation, lintian and clean-container tests passed. Automatic upstream updates additionally require strict metadata validation and an explicit Claude review. Runtime safety checks are disabled; bundled libraries are not serviced by Debian updates. See README, SECURITY.md and attached build records. Automated checks are headless; future GUI/GPU behavior is not guaranteed.'
+          # Never expose a partial upload as a public release.
+          gh release edit "$RELEASE_TAG" --repo "$GH_REPO" --draft=false --latest
