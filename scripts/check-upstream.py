@@ -57,7 +57,7 @@ def read_config(text):
     version_tuple(config["ZIG_VERSION"])
     if not re.fullmatch(SHA, config["GHOSTTY_COMMIT"]):
         raise ValueError("Invalid pinned Ghostty commit")
-    if not re.fullmatch(re.escape(config["GHOSTTY_VERSION"]) + r"-[0-9]+personal[0-9]+~deb13u[0-9]+",
+    if not re.fullmatch(re.escape(config["GHOSTTY_VERSION"]) + r"-[0-9]+personal[0-9]+\.deb13u[0-9]+",
                         config["DEBIAN_VERSION"]):
         raise ValueError("Pinned Ghostty and Debian versions disagree")
     return config
@@ -114,7 +114,7 @@ def discover(config, api=None):
     return {"update_available": True, "version": version, "commit": commit,
             "tag": latest["name"], "minimum_zig_version": minimum,
             "zig_version": config["ZIG_VERSION"],
-            "debian_version": f"{version}-1personal1~deb13u1",
+            "debian_version": f"{version}-1personal1.deb13u1",
             "url": f"https://release.files.ghostty.org/{version}/ghostty-{version}.tar.gz"}
 
 

@@ -20,6 +20,7 @@ packages=(/work/*.deb)
 [[ $(dpkg-deb -f "${packages[0]}" Architecture) == amd64 ]]
 # Lintian's normal exit code treats errors as fatal; warnings are retained for review.
 lintian --fail-on error /work/*.changes 2>&1 | tee /out/lintian.log
+if [[ ! -s /out/lintian.log ]]; then printf 'No lintian diagnostics.\n' > /out/lintian.log; fi
 cp /work/*.deb /work/*.buildinfo /work/*.changes /out/
 cp /work/records/* /out/
 cp /work/packaging-*.txt /out/

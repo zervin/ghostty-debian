@@ -20,13 +20,13 @@ class ReleaseMetadataTests(unittest.TestCase):
                          (version, "ghostty-" + version.replace("~", "-")))
 
     def test_reject_injection_and_unstable_versions(self):
-        for value in ["$(touch /tmp/no)", "1.4.0\nX=bad", "nightly", "1.4.0-1personal1~deb13u1;id", "1.4.0-1personal1~deb13u1\nx"]:
+        for value in ["1.4.0-1personal1~deb13u1", "1.4.0-1personal1Xdeb13u1", "$(touch /tmp/no)", "1.4.0\nX=bad", "nightly", "1.4.0-1personal1.deb13u1;id", "1.4.0-1personal1.deb13u1\nx"]:
             with self.subTest(value=value), self.assertRaises((ValueError, KeyError)):
                 metadata.identifiers(f"GHOSTTY_VERSION=1.4.0\nDEBIAN_VERSION={value}\n")
 
     def test_reject_version_mismatch(self):
         with self.assertRaises(ValueError):
-            metadata.identifiers("GHOSTTY_VERSION=1.3.0\nDEBIAN_VERSION=1.4.0-1personal1~deb13u1\n")
+            metadata.identifiers("GHOSTTY_VERSION=1.3.0\nDEBIAN_VERSION=1.4.0-1personal1.deb13u1\n")
 
     def test_github_output(self):
         with tempfile.TemporaryDirectory() as directory:

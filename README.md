@@ -1,7 +1,9 @@
 # ghostty-debian
 
 Independent personal **Ghostty 1.4.0** packaging for **Debian 13 (trixie), amd64**.
-Package: `ghostty`, version `1.4.0-1personal1~deb13u1`. Not an official Ghostty
+Package: `ghostty`, version `1.4.0-1personal1.deb13u1`. The dot-based Debian
+revision avoids GitHub rewriting `~` in asset names and invalidating checksums.
+Not an official Ghostty
 or Debian package, apt repository, or supported distribution service.
 
 > **zervin's personal risk tolerance:** I maintain this for my own use and my own
@@ -152,8 +154,8 @@ random workflow artifact. In the download directory:
 
 ```sh
 # If only the .deb was downloaded, verify its entry specifically:
-grep '  ghostty_1.4.0-1personal1~deb13u1_amd64.deb$' SHA256SUMS | sha256sum --check --strict
-sudo apt install ./ghostty_1.4.0-1personal1~deb13u1_amd64.deb
+grep '  ghostty_1.4.0-1personal1.deb13u1_amd64.deb$' SHA256SUMS | sha256sum --check --strict
+sudo apt install ./ghostty_1.4.0-1personal1.deb13u1_amd64.deb
 ghostty +version
 # Optional removal:
 sudo apt purge ghostty

@@ -19,14 +19,14 @@ TAG_SHA = "b" * 40
 CONFIG = """# Preserve reviewed compiler and keys.
 GHOSTTY_VERSION=1.4.0
 GHOSTTY_COMMIT=cccccccccccccccccccccccccccccccccccccccc
-DEBIAN_VERSION=1.4.0-2personal3~deb13u1
+DEBIAN_VERSION=1.4.0-2personal3.deb13u1
 ZIG_VERSION=0.17.1
 GHOSTTY_URL=https://release.files.ghostty.org/1.4.0/ghostty-1.4.0.tar.gz
 ZIG_URL=https://ziglang.org/download/0.17.1/zig-x86_64-linux-0.17.1.tar.xz
 GHOSTTY_KEY=keep-source-key
 ZIG_KEY=keep-zig-key
 """
-CHANGELOG = """ghostty (1.4.0-2personal3~deb13u1) trixie; urgency=medium
+CHANGELOG = """ghostty (1.4.0-2personal3.deb13u1) trixie; urgency=medium
 
   * Existing entry.
 
@@ -66,7 +66,7 @@ class CheckUpstreamTests(unittest.TestCase):
         self.assertEqual(candidate["commit"], COMMIT)
         self.assertEqual(candidate["minimum_zig_version"], "0.17.1")
         self.assertEqual(candidate["zig_version"], "0.17.1")
-        self.assertEqual(candidate["debian_version"], "1.5.0-1personal1~deb13u1")
+        self.assertEqual(candidate["debian_version"], "1.5.0-1personal1.deb13u1")
         self.assertEqual(candidate["url"], "https://release.files.ghostty.org/1.5.0/ghostty-1.5.0.tar.gz")
         self.assertFalse(any("releases/latest" in call.args[0] for call in self.api.call_args_list))
 
@@ -169,7 +169,7 @@ class CheckUpstreamTests(unittest.TestCase):
                     self.assertEqual(updated[key], self.config[key])
             self.assertEqual(updated["GHOSTTY_COMMIT"], COMMIT)
             changelog = (root / "debian/changelog").read_text()
-            self.assertTrue(changelog.startswith("ghostty (1.5.0-1personal1~deb13u1) trixie; urgency=medium\n"))
+            self.assertTrue(changelog.startswith("ghostty (1.5.0-1personal1.deb13u1) trixie; urgency=medium\n"))
             self.assertIn(" -- zervin <zervin@users.noreply.github.com>  ", changelog)
             self.assertTrue(changelog.endswith(CHANGELOG))
             self.assertEqual(sorted(p.relative_to(root).as_posix() for p in root.rglob("*") if p.is_file()),

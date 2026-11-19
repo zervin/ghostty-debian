@@ -69,15 +69,15 @@ jobs:
         run: |
           set -euo pipefail
           [[ $TARGET_SHA =~ ^[0-9a-f]{40}$ ]]
-          [[ $PACKAGE_VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+-[0-9]+personal[0-9]+~deb13u[0-9]+$ ]]
-          [[ $RELEASE_TAG == "ghostty-${PACKAGE_VERSION/\~/-}" ]]
+          [[ $PACKAGE_VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+-[0-9]+personal[0-9]+\.deb13u[0-9]+$ ]]
+          [[ $RELEASE_TAG == "ghostty-${PACKAGE_VERSION}" ]]
           [[ -f "$RUNNER_TEMP/release/ghostty_${PACKAGE_VERSION}_amd64.deb" ]]
           [[ -f "$RUNNER_TEMP/release/SHA256SUMS" ]]
           # Refuse unexpected paths. Data files are uploaded, never sourced or executed.
           for file in "$RUNNER_TEMP/release/"*; do
-            [[ -f $file && ! -L $file ]]
+            [[ -s $file && -f $file && ! -L $file ]]
             name=${file##*/}
-            [[ $name =~ ^[a-zA-Z0-9._+~=-]+$ ]]
+            [[ $name =~ ^[a-zA-Z0-9._-]+$ ]]
           done
           # Refuse an existing tag rather than attaching a release to an older commit.
           existing=$(gh api "repos/$GH_REPO/git/matching-refs/tags/$RELEASE_TAG" --jq '.[].ref')

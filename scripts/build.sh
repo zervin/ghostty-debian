@@ -24,6 +24,10 @@ docker image inspect "$image" > "$out/builder-image.json"
 printf '%s\n' "$image" > "$out/builder-image-id.txt"
 git rev-parse HEAD > "$work/packaging-commit.txt"
 git status --porcelain > "$work/packaging-status.txt"
+# GitHub release uploads reject zero-byte assets; record cleanliness explicitly.
+if [[ ! -s "$work/packaging-status.txt" ]]; then
+    printf 'clean\n' > "$work/packaging-status.txt"
+fi
 common=(--rm --platform linux/amd64 --user 1000:1000 --read-only
     --cap-drop ALL --security-opt no-new-privileges --pids-limit 2048
     --tmpfs '/tmp:rw,nosuid,nodev,size=2g'
