@@ -4,7 +4,7 @@ Priority: optional
 Maintainer: zervin <zervin@users.noreply.github.com>
 Build-Depends: debhelper-compat (= 13), build-essential, pandoc, gettext,
  libadwaita-1-dev, libgtk-4-dev, libxml2-utils, pkgconf, libbz2-dev,
- libonig-dev, ncurses-bin, python3
+ libonig-dev, ncurses-bin, python3, patchelf
 Standards-Version: 4.7.2
 Homepage: https://ghostty.org/
 Rules-Requires-Root: no

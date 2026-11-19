@@ -10,22 +10,40 @@ export TZ = UTC
 
 override_dh_auto_configure:
 
-target_flags = -Doptimize=ReleaseSafe -Dcpu=baseline -Dpie=true -Dsentry=false -fno-sys=gtk4-layer-shell -Demit-docs -Dversion-string=1.4.0
+upstream_version = $(firstword $(subst -, ,$(shell dpkg-parsechangelog -S Version)))
+target_flags = -Doptimize=ReleaseSafe -Dcpu=baseline -Dpie=true -Dsentry=false -fno-sys=gtk4-layer-shell -Demit-docs -Dversion-string=$(upstream_version)
 
 override_dh_auto_build:
-	DESTDIR=$(CURDIR)/debian/tmp zig build $(target_flags) --prefix /usr --prefix-lib-dir lib
+	# Zig builds and stages in auto_install, after dh_prep clears debian/tmp.
 
 override_dh_auto_test:
 	# Runtime smoke tests run after installing the package in a fresh container.
 
 override_dh_auto_install:
+	DESTDIR=$(CURDIR)/debian/tmp zig build $(target_flags) --prefix /usr --prefix-lib-dir lib
+	# This application package does not ship the separate VT development library.
+	find debian/tmp -name '*.a' -delete
+	rm -rf debian/tmp/usr/include
+	rm -f debian/tmp/usr/lib/libghostty-vt.so*
+	# Keep the bundled, unversioned layer-shell private; never search build paths.
+	mkdir -p debian/tmp/usr/lib/ghostty
+	mv debian/tmp/usr/lib/libgtk4-layer-shell.so debian/tmp/usr/lib/ghostty/
+	patchelf --set-rpath '$$ORIGIN/../lib/ghostty' debian/tmp/usr/bin/ghostty
+	patchelf --remove-rpath debian/tmp/usr/lib/ghostty/libgtk4-layer-shell.so
+	find debian/tmp/usr/share -type f -name '*.desktop' -exec chmod 0644 {} +
 	python3 debian/collect-licenses.py
+
+override_dh_dwz:
+	# No dbgsym package is emitted; avoid orphaned shared DWARF files.
 
 override_dh_strip:
 	dh_strip --no-automatic-dbgsym
 
 override_dh_auto_clean:
 	rm -rf .zig-cache zig-out debian/bundled-licenses
+
+override_dh_shlibdeps:
+	dh_shlibdeps -l$(CURDIR)/debian/ghostty/usr/lib/ghostty
 
 override_dh_installdocs:
 	dh_installdocs LICENSE debian/packaging-LICENSE build.zig.zon build.zig.zon.txt

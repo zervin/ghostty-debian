@@ -7,6 +7,7 @@ umask 022
 cd /work/source
 [[ $(dpkg-parsechangelog -S Version) == "$DEBIAN_VERSION" ]]
 [[ $(zig version) == "$ZIG_VERSION" ]]
+bash /repo/tests/integration-cache.sh /work/source | tee /work/records/cache-regression.txt
 export SOURCE_DATE_EPOCH
 SOURCE_DATE_EPOCH=$(dpkg-parsechangelog -S Timestamp)
 export DEB_BUILD_OPTIONS
@@ -28,6 +29,7 @@ dpkg-query -W -f='${binary:Package}\t${Version}\t${Architecture}\n' > /out/build
         "$GHOSTTY_VERSION" "$GHOSTTY_COMMIT" "$ZIG_VERSION" "$DEBIAN_VERSION" "$DEBIAN_IMAGE"
     printf 'source_date_epoch=%s\nnetwork_during_compile=none\nuid=%s\n' "$SOURCE_DATE_EPOCH" "$(id -u)"
     printf 'build_options=ReleaseSafe,cpu=baseline,pie=true,sentry=false,bundled-gtk4-layer-shell,emit-docs\n'
+    printf 'dependency_mode=normal-zig-pkg-prefetched-with-fetch-all\n'
     zig version
     dpkg-buildpackage --version
     uname -a
@@ -36,6 +38,6 @@ dpkg-deb --info "${packages[0]}" > /out/package-info.txt
 dpkg-deb --contents "${packages[0]}" > /out/package-contents.txt
 mkdir /work/control
 dpkg-deb -e "${packages[0]}" /work/control
-# dh_makeshlibs should emit ldconfig triggers for the bundled shared library.
-grep -Eq '^activate(-noawait)? ldconfig$' /work/control/triggers
-cp /work/control/triggers /out/package-triggers.txt
+# Private bundled library is found only through an origin-relative package path.
+[[ $(patchelf --print-rpath /work/source/debian/ghostty/usr/bin/ghostty) == "\$ORIGIN/../lib/ghostty" ]]
+find /work/control -maxdepth 1 -type f -exec cp '{}' /out/ \;

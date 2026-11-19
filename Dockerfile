@@ -4,7 +4,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential debhelper devscripts fakeroot minisign curl ca-certificates \
     pandoc gettext libadwaita-1-dev libgtk-4-dev libxml2-utils pkgconf \
     libbz2-dev libonig-dev xz-utils python3 lintian ncurses-bin \
-    desktop-file-utils binutils file \
+    desktop-file-utils binutils file patchelf \
     && rm -rf /var/lib/apt/lists/*
 # No credentials, source, or dependency cache are baked into this image.
 RUN useradd --uid 1000 --create-home builder

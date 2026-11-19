@@ -1,6 +1,15 @@
-name: Manual Debian package
+name: Reviewed Debian package
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - release.conf
+      - 'debian/**'
+      - 'scripts/**'
+      - 'tests/**'
+      - Dockerfile
+      - .github/workflows/release.yml
 
 permissions:
   contents: read
@@ -13,6 +22,7 @@ jobs:
   build:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
+    timeout-minutes: 120
     permissions:
       contents: read
     outputs:
@@ -39,6 +49,7 @@ jobs:
   publish:
     needs: build
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     permissions:
       contents: write
     steps:

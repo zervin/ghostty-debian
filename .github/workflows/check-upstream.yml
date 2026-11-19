@@ -1,0 +1,85 @@
+name: Review upstream Ghostty release
+on:
+  schedule:
+    - cron: '23 8 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: check-upstream
+  cancel-in-progress: false
+
+jobs:
+  check:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      available: ${{ steps.candidate.outputs.available }}
+      version: ${{ steps.candidate.outputs.version }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Check verified stable upstream tags
+        id: candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/check-upstream.py --check | tee "$RUNNER_TEMP/candidate.json"
+          python3 - <<'PY'
+          import json, os, re
+          from pathlib import Path
+          data = json.loads((Path(os.environ['RUNNER_TEMP']) / 'candidate.json').read_text())
+          assert re.fullmatch(r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)', data['version'])
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f"available={str(data['update_available']).lower()}\nversion={data['version']}\n")
+          PY
+
+  propose:
+    needs: check
+    if: github.ref == 'refs/heads/main' && needs.check.outputs.available == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      # This is the trusted workflow commit, never the proposed branch or PR contents.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Propose reviewed inputs without replacing an existing branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ needs.check.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ $VERSION =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+          BRANCH="automation/ghostty-$VERSION"
+          existing=$(gh api "repos/$GH_REPO/git/matching-refs/heads/$BRANCH" --jq '.[].ref')
+          if [[ -n $existing ]]; then
+            echo "Branch $BRANCH already exists; leaving its changes and PR untouched."
+            gh pr list --repo "$GH_REPO" --head "$BRANCH" --base main
+            exit 0
+          fi
+          python3 scripts/check-upstream.py --update --expected-version "$VERSION"
+          git switch -c "$BRANCH"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- release.conf debian/changelog
+          git commit -m "Review Ghostty $VERSION stable release inputs"
+          gh auth setup-git
+          # No force push: a concurrent or foreign branch must never be overwritten.
+          git push origin "HEAD:refs/heads/$BRANCH"
+          gh pr create --repo "$GH_REPO" --base main --head "$BRANCH" \
+            --title "Review Ghostty $VERSION stable release" \
+            --body 'Review the verified upstream tag, pinned commit, source URL, Debian revision and changelog. The pinned Zig compiler is unchanged and satisfies the upstream minimum; an actual build still validates compatibility. Merge manually to trigger the Debian build and draft release. GITHUB_TOKEN-created PRs do not trigger other workflows. No automatic merge or publication.'

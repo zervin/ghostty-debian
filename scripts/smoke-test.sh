@@ -9,7 +9,8 @@ apt-get install -y --no-install-recommends "${packages[0]}" ncurses-bin desktop-
 version=$(dpkg-deb -f "${packages[0]}" Version)
 [[ $(dpkg-query -W -f='${Version}' ghostty) == "$version" ]]
 ghostty +version | tee /tmp/ghostty-version.txt
-grep -Eq '^Ghostty 1\.4\.0([[:space:]]|$)' /tmp/ghostty-version.txt
+upstream=${version%%-*}
+grep -Fq "Ghostty $upstream" /tmp/ghostty-version.txt
 # Test CLI as a non-root user with a new home and no display server.
 useradd --create-home smoke
 printf 'font-size = 12\n' > /tmp/valid.ghostty
@@ -23,9 +24,9 @@ ldd /usr/bin/ghostty | tee /tmp/ghostty-ldd.txt
 if grep -q 'not found' /tmp/ghostty-ldd.txt; then
     echo 'Unresolved runtime library' >&2; exit 1
 fi
-ldconfig -p | grep libgtk4-layer-shell
-# Check every installed desktop file, not a guessed application ID.
-while IFS= read -r desktop; do desktop-file-validate "$desktop"; done < <(dpkg -L ghostty | grep '\.desktop$')
+grep -F '/usr/bin/../lib/ghostty/libgtk4-layer-shell.so' /tmp/ghostty-ldd.txt
+# Validate application entries; KDE service-menu entries use a different schema.
+while IFS= read -r desktop; do desktop-file-validate "$desktop"; done < <(dpkg -L ghostty | grep '^/usr/share/applications/.*\.desktop$')
 files=$(dpkg -L ghostty)
 for resource in '/usr/share/icons/' '/usr/share/man/' '/usr/share/bash-completion/' '/usr/share/fish/' '/usr/share/zsh/' '/usr/share/doc/ghostty/bundled-licenses/'; do
     grep -Fq "$resource" <<< "$files"
@@ -33,10 +34,8 @@ done
 dpkg-query -W -f='${binary:Package}\t${Version}\t${Architecture}\n'
 apt-get purge -y ghostty
 [[ ! -e /usr/bin/ghostty ]]
-if ldconfig -p | grep libgtk4-layer-shell; then
-    echo 'Bundled shared library still registered after purge' >&2; exit 1
-fi
+[[ ! -e /usr/lib/ghostty/libgtk4-layer-shell.so ]]
 if dpkg-query -W -f='${db:Status-Status}' ghostty 2>/dev/null | grep -q installed; then
     exit 1
 fi
-echo 'PASS: install, version, config, terminfo, resources, shared-library lookup, purge'
+echo 'PASS: install, version, config, terminfo, resources, private shared-library lookup, purge'

@@ -1,0 +1,7 @@
+# Personal pristine-source build deliberately retains upstream bundled libraries.
+# These are not covered by Debian security updates: rebuild on upstream fixes.
+# Do not extend this list or suppress RUNPATH/hardening errors without review.
+ghostty: embedded-library freetype [usr/bin/ghostty]
+ghostty: embedded-library libpng [usr/bin/ghostty]
+ghostty: embedded-library libxml2 [usr/bin/ghostty]
+ghostty: embedded-library zlib [usr/bin/ghostty]

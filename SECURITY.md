@@ -8,7 +8,7 @@ GitHub private vulnerability reporting if enabled, or contact zervin through the
 credentials in a public issue. Application vulnerabilities belong with
 [Ghostty upstream](https://github.com/ghostty-org/ghostty/security/policy).
 
-## Initial trust bootstrap (2026-11-07)
+## Initial trust bootstrap (2026-11-19)
 
 The following were read independently from official HTTPS documentation, not
 inferred solely from this repository's supplied configuration:
@@ -25,8 +25,8 @@ inferred solely from this repository's supplied configuration:
   is `83fb95624b0439ee660c2679b43b38c8b63769cd`. Its
   [build.zig.zon](https://github.com/ghostty-org/ghostty/blob/83fb95624b0439ee660c2679b43b38c8b63769cd/build.zig.zon)
   requires Zig 0.17.0 minimum. The documentation's version table was stale;
-  the selected stable toolchain is 0.17.1. An actual build is still needed to
-  demonstrate compatibility.
+  the selected stable toolchain is 0.17.1. Local staging built and installed
+  this combination successfully; hosted CI must still pass for each release.
 * Build option names were checked in
   [Config.zig](https://github.com/ghostty-org/ghostty/blob/83fb95624b0439ee660c2679b43b38c8b63769cd/src/build/Config.zig)
   and Zig's standard target/optimization options. Zig 0.17.1's
@@ -47,7 +47,7 @@ cryptographic certification of the keys. Re-check keys through official channels
 before changes; never silently accept a new key after verification fails.
 The Git commit is review provenance, **not a claim that the signed distribution
 tarball is byte-identical to a GitHub archive**. The release signer authenticates
-the tarball and the tarball's dependency-fetch script/list. No independently
+the tarball and its dependency manifests. No independently
 anchored source/toolchain SHA256 was supplied initially: preparation verifies
 minisign first, then records the observed hashes and signature records. These
 hashes can be reviewed and pinned in a later deliberate update.
@@ -57,10 +57,28 @@ hashes can be reviewed and pinned in a later deliberate update.
 * Signatures authenticate holders of the configured signing keys, not code
   correctness or freedom from vulnerabilities. GitHub/TLS/account compromises,
   malicious or compromised compilers, and compromised upstreams remain possible.
-* Dependency downloads follow the verified upstream fetch script and Zig package
-  hashes. They are transitive supply-chain inputs, not a separate maintainer audit.
-  License/notice collection is heuristic; inspect license coverage before
-  redistribution. The packaging MIT license does not relicense bundled code/fonts.
+* Dependency preparation runs normal-mode `zig build --fetch=all` from fresh
+  verified source and an empty global cache. Zig checks declared dependency hashes
+  and populates default local `source/zig-pkg` storage without running build steps.
+  Bare URL `zig fetch` in 0.17.1 can recompress an extra outer temporary-directory
+  wrapper into the global cache: see
+  [Fetch.runResource](https://codeberg.org/ziglang/zig/src/tag/0.17.1/lib/compiler/Maker/Fetch.zig).
+  Reusing those archives produced the observed hash mismatches. A fresh-cache
+  `--fetch=all` probe succeeded with 37 local dependency directories; this path
+  supplies local storage and exits before build execution in
+  [Maker](https://codeberg.org/ziglang/zig/src/tag/0.17.1/lib/compiler/Maker.zig).
+  No declared hashes are changed, no custom extraction is used, and normal
+  system-library integration defaults are preserved (no `--system`). Global-cache
+  and local-package checksums are recorded. Because Zig can trust existing
+  hash-named directories without rehashing, preparation requires fresh storage.
+  The offline integration regression additionally recomputes the known libxev
+  directory's exact signed-manifest identity in a separate fresh cache; it does
+  not independently rehash every dependency. Local offline build and clean
+  install/purge validation passed.
+  These checks are not an audit of transitive code. License collection includes
+  `source/zig-pkg` through source traversal and remains heuristic; inspect coverage
+  before redistribution. The packaging MIT license does not relicense bundled
+  code/fonts.
 * Debian apt verifies its signed repository metadata but repositories move.
   Base-image digest, inventories and `.buildinfo` aid review, not reproducibility.
   This is not a Debian-policy-complete source archive or Debian official upload;
@@ -75,13 +93,26 @@ hashes can be reviewed and pinned in a later deliberate update.
 * The fresh installation test is root inside a disposable base container and has
   apt network access. A `.deb` is executable privileged installation content;
   generated debhelper scripts/triggers are still code. Review them before use.
-  No handwritten maintainer scripts are supplied. ldconfig registration/removal
-  of bundled GTK4 layer-shell is explicitly checked.
+  No handwritten maintainer scripts are supplied. The private bundled GTK4
+  layer-shell library is resolved via `$ORIGIN/../lib/ghostty`; its removal is
+  explicitly checked. Build/working-directory RUNPATH entries are removed.
+* Four exact lintian embedded-library exceptions retain pristine upstream
+  FreeType/libpng/libxml2/zlib. These copies are not patched by Debian library
+  updates. The maintainer must monitor upstream and rebuild; this is a personal
+  tolerance decision, not Debian-policy-complete packaging. Other lintian errors
+  remain fatal. Current warnings concern line adjustment in generated manuals.
 * Workflow actions are full-SHA pinned, checkout credentials are not persisted,
   the build job is read-only, and a separate clean publish runner alone receives
   release-write permission. Downloaded artifacts are uploaded as data, not
-  executed. Manual dispatch is restricted to `main`; no automatic updates or
-  privileged pull-request builds exist. Maintainers with write access can still
+  executed. Builds accept manual dispatch and reviewed packaging pushes to
+  `main`, never untrusted PR code. A separate daily/manual checker proposes new
+  stable versions in PRs; it requires a verified annotated tag, pins the commit,
+  and never upgrades Zig automatically. Its proposing job has contents/PR write
+  permission but never executes the proposed branch. A human merge is required
+  before building; no automatic merge or public release exists. GitHub Actions
+  PR creation must be enabled. If compiler compatibility changes or signatures
+  fail, maintenance is required rather than silently relaxing verification.
+  Maintainers with write access can still
   alter this policy and GitHub controls the runners/token service.
 * `SHA256SUMS` detects differing files relative to the downloaded checksum list;
   it does not independently authenticate an uploader when both are compromised.

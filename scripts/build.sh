@@ -29,7 +29,7 @@ common=(--rm --platform linux/amd64 --user 1000:1000 --read-only
     --tmpfs '/tmp:rw,nosuid,nodev,size=2g'
     --mount "type=bind,src=$root,dst=/repo,readonly"
     --mount "type=bind,src=$work,dst=/work")
-# Online preparation executes the verified upstream dependency-fetch script.
+# Online preparation fetches through the verified source's dependency manifests.
 # No home directory, token, SSH agent, or Docker socket is passed through.
 docker run "${common[@]}" "$image" bash /repo/scripts/prepare.sh 2>&1 | tee "$out/prepare.log"
 # Actual compilation has no network interface other than loopback.

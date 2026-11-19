@@ -11,6 +11,8 @@ for label, root in (("source", Path(".")), ("zig-cache", Path(os.environ["ZIG_GL
         dirs[:] = sorted(d for d in dirs if d not in {"debian", ".zig-cache", "zig-out", ".git"})
         for name in sorted(files):
             lower = name.lower()
+            if name.startswith("._"):
+                continue
             if not (any(word in lower for word in ("license", "copying", "copyright", "notice")) or lower in {"ofl", "ofl.txt"}):
                 continue
             source = Path(directory) / name
